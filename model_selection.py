@@ -45,30 +45,6 @@ def collect_cv_metric(bucket, model_path, metric_name):
     return metric
 
     
-def select_first_tier_models(paired_model_tests: list):
-    in_bucket = set()
-    out_bucket = set()
-    for test in paired_model_tests:
-        m1, m2, p, stats = test[0], test[1], test[2], test[3]
-        if p < 0.05:
-            if stats > 0:
-                better_model = m1
-                worse_model = m2
-            else:
-                better_model = m2
-                worse_model = m1
-            out_bucket.add(worse_model)
-            if worse_model in in_bucket:
-                in_bucket.remove(worse_model)
-            if better_model not in out_bucket:
-                in_bucket.add(better_model)
-        else: #paired model test is not significant
-            if m1 not in out_bucket:
-                in_bucket.add(m1)
-            if m2 not in out_bucket:
-                in_bucket.add(m2)
-    return in_bucket
-
 def signed_rank_test_direction(x, y):
     '''
     get the direction of signed rank test
@@ -111,8 +87,8 @@ class model_selection():
         collect_cv_metric(self.buckets[i], self.models[i], "sens_upperthresh_spec90") for i in range(n)
         ]
         self.cv_metrics = {self.models[i]: sens90specs[i] for i in range(len(self.models))}
-        self.cv_std = {self.models[i]: np.std(sens90specs[i]) for i in range(len(self.models))}
-        self.cv_sem = {self.models[i]: stats.sem(sens90specs[i]) for i in range(len(self.models))}
+        self.cv_std = {self.models[i]: np.std(sens90specs[i]) for i in range(len(self.models))} #standard deviation
+        self.cv_sem = {self.models[i]: stats.sem(sens90specs[i]) for i in range(len(self.models))} #standard error
         paired_test_results = []
         for i in range(n):
             for j in range(i + 1, n):
@@ -138,11 +114,14 @@ class model_selection():
     
     
     def select_first_tier_models(self, paired_model_tests: list):
+        '''
+        select models that are not significantly worse than any other models
+        '''
         in_bucket = set()
         out_bucket = set()
         for test in paired_model_tests:
             m1, m2, p, greater = test[0], test[1], test[2], test[3]
-            if p < 0.05:
+            if p < 0.05: #paired model test is significant
                 if greater:
                     better_model = m1
                     worse_model = m2
@@ -167,7 +146,7 @@ class model_selection():
     def rank_model_by_metrics(self, models, metric_dict):
         metrics = [metric_dict[m] for m in models]
         # rank model by performance metrics
-        return [x for x, _ in sorted(zip(models, metrics), key=lambda pair: pair[1], reverse=True)]
+        return [x for x, _ in sorted(zip(models, metrics), key=lambda pair: pair[1], reverse=True)] #decreasing order
     
     def rank_model_by_complexity(self, best_model, complexity_rank_dict, metric_dict):
         self.complexity_ranks = complexity_rank_dict
@@ -177,5 +156,5 @@ class model_selection():
         models_within_OSE = list(np.array(self.first_tier_models)[[self.performance_metrics[x] >= lower_bound for x in self.first_tier_models]])
         metrics = [metric_dict[m] for m in models_within_OSE]
         ranks = [complexity_rank_dict[m] for m in models_within_OSE]
-        return [x for x, _, _ in sorted(zip(models_within_OSE, ranks, metrics), key=itemgetter(1,2), reverse=True)]
+        return [x for x, _, _ in sorted(zip(models_within_OSE, ranks, metrics), key=itemgetter(1,2), reverse=True)] #both decreasing order
         
